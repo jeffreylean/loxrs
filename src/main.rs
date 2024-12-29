@@ -38,6 +38,7 @@ fn run_prompt() -> miette::Result<()> {
         println!("> ");
         let mut line = String::new();
         io::stdin().read_line(&mut line).unwrap();
+        line = line.trim_end().to_string();
 
         if line.is_empty() {
             break;

@@ -57,8 +57,25 @@ impl fmt::Display for TokenType<'_> {
                 TokenType::Rbrace => "RIGHT_BRACE } null",
                 TokenType::Star => "STAR * null",
                 TokenType::Dot => "DOT . null",
-                TokenType::String(s) =>
-                    return write!(f, "String \"{s}\" {}", TokenType::unescape(s)),
+                TokenType::String(s) => return write!(f, "String {s} {}", TokenType::unescape(s)),
+                TokenType::Ident(s) => todo!(),
+                TokenType::Number(s, dec) => todo!(),
+                TokenType::Class => todo!(),
+                TokenType::And => todo!(),
+                TokenType::Else => todo!(),
+                TokenType::False => todo!(),
+                TokenType::For => todo!(),
+                TokenType::Fun => todo!(),
+                TokenType::If => todo!(),
+                TokenType::Nil => todo!(),
+                TokenType::Or => todo!(),
+                TokenType::Print => todo!(),
+                TokenType::Return => todo!(),
+                TokenType::Super => todo!(),
+                TokenType::This => todo!(),
+                TokenType::True => todo!(),
+                TokenType::Var => todo!(),
+                TokenType::While => todo!(),
             }
         )
     }
@@ -66,7 +83,34 @@ impl fmt::Display for TokenType<'_> {
 
 impl TokenType<'_> {
     pub fn unescape<'de>(s: &'de str) -> Cow<'de, str> {
-        todo!()
+        // trim starting and ending "
+        let s = &s[1..s.len() - 1];
+        if !s.contains('\\') {
+            return Cow::Borrowed(s);
+        }
+
+        let mut result = String::with_capacity(s.len());
+        let mut chars = s.chars();
+
+        while let Some(ch) = chars.next() {
+            if ch == '\\' {
+                match chars.next() {
+                    Some('n') => result.push('\n'),
+                    Some('r') => result.push('\r'),
+                    Some('t') => result.push('\t'),
+                    Some('\\') => result.push('\\'),
+                    Some('"') => result.push('"'),
+                    Some(ch) => {
+                        result.push('\\');
+                        result.push(ch);
+                    }
+                    None => result.push('\\'),
+                }
+            } else {
+                result.push(ch);
+            }
+        }
+        Cow::Owned(result)
     }
 }
 
@@ -92,6 +136,7 @@ impl<'de> Iterator for Lexer<'de> {
     fn next(&mut self) -> Option<Self::Item> {
         let mut chars = self.rest.chars();
         let c = chars.next()?;
+        let current_onwards = self.rest;
         self.rest = chars.as_str();
         self.offset += c.len_utf8();
 
@@ -144,8 +189,25 @@ impl<'de> Iterator for Lexer<'de> {
                 let ident = &self.whole[self.offset - c.len_utf8()..len + self.offset];
                 return Some(Ok(TokenType::Ident(ident)));
             }
+            Started::String => {
+                // Find closing string quote
+                if !self.rest.contains('"') {
+                    return Some(Err(miette::miette! {
+                        labels = vec![
+                            LabeledSpan::at(self.offset - c.len_utf8()..self.offset, "this opening double quote")
+                    ],
+                        "Missing closing double quote"
+                    }));
+                }
+                if let Some(idx) = self.rest.rfind('"') {
+                    let string = &current_onwards[..idx + 2];
+                    self.rest = &self.rest[idx + 1..];
+                    self.offset += idx + 1;
+                    return Some(Ok(TokenType::String(string)));
+                }
+                None
+            }
             _ => todo!(),
         }
-        todo!()
     }
 }
