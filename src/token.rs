@@ -58,7 +58,7 @@ impl fmt::Display for TokenType<'_> {
                 TokenType::Star => "STAR * null",
                 TokenType::Dot => "DOT . null",
                 TokenType::String(s) => return write!(f, "String {s} {}", TokenType::unescape(s)),
-                TokenType::Ident(s) => todo!(),
+                TokenType::Ident(s) => return write!(f, "IDENTIFIER {} null", s),
                 TokenType::Number(s, dec) => todo!(),
                 TokenType::Class => todo!(),
                 TokenType::And => todo!(),
@@ -134,20 +134,21 @@ impl<'de> Iterator for Lexer<'de> {
     type Item = anyhow::Result<TokenType<'de>, Error>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let mut chars = self.rest.chars();
-        let c = chars.next()?;
-        let current_onwards = self.rest;
-        self.rest = chars.as_str();
-        self.offset += c.len_utf8();
-
         enum Started {
             String,
             Number,
             Ident,
         }
 
-        let start =
-            match c {
+        loop {
+            println!("rest {}", self.rest);
+            let mut chars = self.rest.chars();
+            let c = chars.next()?;
+            let current_onwards = self.rest;
+            self.rest = chars.as_str();
+            self.offset += c.len_utf8();
+
+            let start = match c {
                 '(' => return Some(Ok(TokenType::Lparen)),
                 ')' => return Some(Ok(TokenType::Rparen)),
                 '{' => return Some(Ok(TokenType::Lbrace)),
@@ -161,6 +162,7 @@ impl<'de> Iterator for Lexer<'de> {
                 '"' => Started::String,
                 '0'..='9' => Started::Number,
                 'a'..='z' | '_' => Started::Ident,
+                c if c.is_whitespace() => continue,
 
                 c => return Some(Err(miette::miette! {
                     labels = vec![
@@ -171,43 +173,46 @@ impl<'de> Iterator for Lexer<'de> {
                 .with_source_code(self.whole.to_string()))),
             };
 
-        match start {
-            Started::Ident => {
-                let mut chars = self.rest.chars().peekable();
-                let mut len = 0;
+            match start {
+                Started::Ident => {
+                    let mut chars = self.rest.chars().peekable();
+                    let mut len = 0;
 
-                while let Some(&ch) = chars.peek() {
-                    match ch {
-                        'a'..='z' | '1'..='9' | '_' => {
-                            len += ch.len_utf8();
-                            chars.next();
+                    while let Some(&ch) = chars.peek() {
+                        match ch {
+                            'a'..='z' | '1'..='9' | '_' => {
+                                len += ch.len_utf8();
+                                chars.next();
+                            }
+                            _ => break,
                         }
-                        _ => break,
                     }
-                }
 
-                let ident = &self.whole[self.offset - c.len_utf8()..len + self.offset];
-                return Some(Ok(TokenType::Ident(ident)));
-            }
-            Started::String => {
-                // Find closing string quote
-                if !self.rest.contains('"') {
-                    return Some(Err(miette::miette! {
-                        labels = vec![
-                            LabeledSpan::at(self.offset - c.len_utf8()..self.offset, "this opening double quote")
-                    ],
-                        "Missing closing double quote"
-                    }));
+                    let ident = &self.whole[self.offset - c.len_utf8()..len + self.offset];
+                    self.offset += len;
+                    self.rest = &self.rest[len..];
+                    return Some(Ok(TokenType::Ident(ident)));
                 }
-                if let Some(idx) = self.rest.rfind('"') {
-                    let string = &current_onwards[..idx + 2];
-                    self.rest = &self.rest[idx + 1..];
-                    self.offset += idx + 1;
-                    return Some(Ok(TokenType::String(string)));
+                Started::String => {
+                    // Find closing string quote
+                    if !self.rest.contains('"') {
+                        return Some(Err(miette::miette! {
+                            labels = vec![
+                                LabeledSpan::at(self.offset - c.len_utf8()..self.offset, "this opening double quote")
+                        ],
+                            "Missing closing double quote"
+                        }));
+                    }
+                    if let Some(idx) = self.rest.rfind('"') {
+                        let string = &current_onwards[..idx + 2];
+                        self.rest = &self.rest[idx + 1..];
+                        self.offset += idx + 1;
+                        return Some(Ok(TokenType::String(string)));
+                    }
+                    return None;
                 }
-                None
+                _ => todo!(),
             }
-            _ => todo!(),
         }
     }
 }
