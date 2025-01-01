@@ -17,6 +17,16 @@ pub enum TokenType<'de> {
     Semicolon,
     Star,
 
+    // One or two character token
+    Bang,
+    BangEqual,
+    Equal,
+    EqualEqual,
+    Greater,
+    GreaterEqual,
+    Less,
+    LessEqual,
+
     // Literals
     String(&'de str),
 
@@ -60,6 +70,14 @@ impl fmt::Display for TokenType<'_> {
                 TokenType::String(s) => return write!(f, "String {s} {}", TokenType::unescape(s)),
                 TokenType::Ident(s) => return write!(f, "IDENTIFIER {} null", s),
                 TokenType::Number(s, dec) => todo!(),
+                TokenType::Bang => "BANG ! null",
+                TokenType::BangEqual => "BANG_EQUAL != null",
+                TokenType::Equal => "EQUAL = null",
+                TokenType::EqualEqual => "EQUAL_EQUAL == null",
+                TokenType::Greater => "GREATER > null",
+                TokenType::GreaterEqual => "GREATER_EQUAL >= null",
+                TokenType::Less => "LESS < null",
+                TokenType::LessEqual => "LESS_EQUAL <= null",
                 TokenType::Class => todo!(),
                 TokenType::And => todo!(),
                 TokenType::Else => todo!(),
@@ -138,10 +156,13 @@ impl<'de> Iterator for Lexer<'de> {
             String,
             Number,
             Ident,
+            Bang,
+            Equal,
+            Greater,
+            Less,
         }
 
         loop {
-            println!("rest {}", self.rest);
             let mut chars = self.rest.chars();
             let c = chars.next()?;
             let current_onwards = self.rest;
@@ -159,6 +180,10 @@ impl<'de> Iterator for Lexer<'de> {
                 '+' => return Some(Ok(TokenType::Plus)),
                 ';' => return Some(Ok(TokenType::Semicolon)),
                 '*' => return Some(Ok(TokenType::Star)),
+                '!' => Started::Bang,
+                '=' => Started::Equal,
+                '>' => Started::Greater,
+                '<' => Started::Less,
                 '"' => Started::String,
                 '0'..='9' => Started::Number,
                 'a'..='z' | '_' => Started::Ident,
@@ -173,6 +198,7 @@ impl<'de> Iterator for Lexer<'de> {
                 .with_source_code(self.whole.to_string()))),
             };
 
+            // multi character handling
             match start {
                 Started::Ident => {
                     let mut chars = self.rest.chars().peekable();
@@ -210,6 +236,82 @@ impl<'de> Iterator for Lexer<'de> {
                         return Some(Ok(TokenType::String(string)));
                     }
                     return None;
+                }
+                Started::Bang => {
+                    if let Some(ch) = self.rest.chars().next() {
+                        match ch {
+                            '=' => {
+                                self.rest = &self.rest[1..];
+                                self.offset += ch.len_utf8();
+                                return Some(Ok(TokenType::BangEqual));
+                            }
+                            _ => return Some(Ok(TokenType::Bang)),
+                        }
+                    }
+                    return Some(Err(miette::miette! {
+                    labels = vec![
+                        LabeledSpan::at(self.offset - c.len_utf8()..self.offset, "this character")
+                    ],
+                    "Unexpected token {c} in input",
+                    }
+                    .with_source_code(self.whole.to_string())));
+                }
+                Started::Equal => {
+                    if let Some(ch) = self.rest.chars().next() {
+                        match ch {
+                            '=' => {
+                                self.rest = &self.rest[1..];
+                                self.offset += ch.len_utf8();
+                                return Some(Ok(TokenType::EqualEqual));
+                            }
+                            _ => return Some(Ok(TokenType::Equal)),
+                        }
+                    }
+                    return Some(Err(miette::miette! {
+                    labels = vec![
+                        LabeledSpan::at(self.offset - c.len_utf8()..self.offset, "this character")
+                    ],
+                    "Unexpected token {c} in input",
+                    }
+                    .with_source_code(self.whole.to_string())));
+                }
+                Started::Greater => {
+                    if let Some(ch) = self.rest.chars().next() {
+                        match ch {
+                            '=' => {
+                                self.rest = &self.rest[1..];
+                                self.offset += ch.len_utf8();
+                                return Some(Ok(TokenType::GreaterEqual));
+                            }
+                            _ => return Some(Ok(TokenType::Greater)),
+                        }
+                    }
+                    return Some(Err(miette::miette! {
+                    labels = vec![
+                        LabeledSpan::at(self.offset - c.len_utf8()..self.offset, "this character")
+                    ],
+                    "Unexpected token {c} in input",
+                    }
+                    .with_source_code(self.whole.to_string())));
+                }
+                Started::Less => {
+                    if let Some(ch) = self.rest.chars().next() {
+                        match ch {
+                            '=' => {
+                                self.rest = &self.rest[1..];
+                                self.offset += ch.len_utf8();
+                                return Some(Ok(TokenType::LessEqual));
+                            }
+                            _ => return Some(Ok(TokenType::Less)),
+                        }
+                    }
+                    return Some(Err(miette::miette! {
+                    labels = vec![
+                        LabeledSpan::at(self.offset - c.len_utf8()..self.offset, "this character")
+                    ],
+                    "Unexpected token {c} in input",
+                    }
+                    .with_source_code(self.whole.to_string())));
                 }
                 _ => todo!(),
             }
